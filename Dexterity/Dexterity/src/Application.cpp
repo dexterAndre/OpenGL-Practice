@@ -7,120 +7,22 @@
 #include <string>
 #include <vector>
 
+#include "Renderer.h"
+#include "VertexBuffer.h"
+#include "IndexBuffer.h"
+#include "VertexArray.h"
+#include "VertexBufferLayout.h"
+#include "Shader.h"
+#include "Texture.h"
+
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_opengl3.h"
+#include "imgui/imgui_impl_glfw.h"
 
 
-#define ASSERT(x) if (!(x)) __debugbreak();
-#define GLCall(x) GLClearError();\
-    x;\
-    ASSERT(GLLogCall(#x, __FILE__, __LINE__))
-
-static void GLClearError()
-{
-    while (glGetError() != GL_NO_ERROR);
-}
-
-static bool GLLogCall(const char* function, const char* file, int line)
-{
-    while (GLenum error = glGetError())
-    {
-        std::cout 
-            << "[OpenGL Error] (" << error << "): " 
-            << function << " " 
-            << file << ":" << line 
-            << std::endl;
-        return false;
-    }
-    return true;
-}
-
-struct ShaderProgramSource
-{
-    std::string VertexSource;
-    std::string FragmentSource;
-};
-
-static ShaderProgramSource ParseShader(const std::string& filePath)
-{
-    std::ifstream stream(filePath);
-
-    enum class ShaderType
-    {
-        NONE = -1, VERTEX = 0, FRAGMENT = 1
-    };
-
-    std::string line;
-    std::stringstream ss[2];
-    ShaderType type = ShaderType::NONE;
-    while (getline(stream, line))
-    {
-        if (line.find("#shader") != std::string::npos)
-        {
-            if (line.find("vertex") != std::string::npos)
-            {
-                // Set mode to vertex
-                type = ShaderType::VERTEX;
-            }
-            else if (line.find("fragment") != std::string::npos)
-            {
-                // Set mode to fragment
-                type = ShaderType::FRAGMENT;
-            }
-        }
-        else
-        {
-            ss[(int)type] << line << '\n';
-        }
-    }
-
-    return { ss[0].str(), ss[1].str() };
-}
-
-static unsigned int CompileShader(
-    unsigned int type,
-    const std::string& source)
-{
-    unsigned int id = glCreateShader(type);
-    const char* src = source.c_str();
-    GLCall(glShaderSource(id, 1, &src, nullptr));
-    GLCall(glCompileShader(id));
-
-    int result;
-    GLCall(glGetShaderiv(id, GL_COMPILE_STATUS, &result));
-    if (result == GL_FALSE)
-    {
-        int length;
-        GLCall(glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length));
-        char* message = (char*)alloca(length * sizeof(char));
-        GLCall(glGetShaderInfoLog(id, length, &length, message));
-        std::cout << "ERROR: Failed to compile "
-            << (type == GL_VERTEX_SHADER ? "vertex" : "fragment")
-            << " shader." << std::endl;
-        std::cout << message << std::endl;
-        GLCall(glDeleteShader(id));
-        return 0;
-    }
-
-    return id;
-}
-
-static unsigned int CreateShader(
-    const std::string& vertexShader,
-    const std::string& fragmentShader)
-{
-    unsigned int program = glCreateProgram();
-    unsigned int vs = CompileShader(GL_VERTEX_SHADER, vertexShader);
-    unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fragmentShader);
-
-    GLCall(glAttachShader(program, vs));
-    GLCall(glAttachShader(program, fs));
-    GLCall(glLinkProgram(program));
-    GLCall(glValidateProgram(program));
-
-    GLCall(glDeleteShader(vs));
-    GLCall(glDeleteShader(fs));
-
-    return program;
-}
 
 int main(void)
 {
@@ -145,7 +47,6 @@ int main(void)
 
     /* Make the window's context current */
     glfwMakeContextCurrent(window);
-
     glfwSwapInterval(1);
 
     /* Initializing OpenGL functions */
@@ -156,102 +57,123 @@ int main(void)
 
     std::cout << "[OpenGL Version: " << glGetString(GL_VERSION) << "]" << std::endl;
 
+    /* Setting OpenGL states */
+    GLCall(glEnable(GL_BLEND));
+    GLCall(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 
-
-
-
-    std::vector<float> positions = {
-         0.5f,  0.5f,
-        -0.5f,  0.5f,
-        -0.5f, -0.5f,
-         0.5f, -0.5f
-    };
-
-    std::vector<unsigned int> indices = {
-        0, 1, 2,
-        0, 2, 3
-    };
-
-    unsigned int VAO;
-    GLCall(glGenVertexArrays(1, &VAO));
-    GLCall(glBindVertexArray(VAO));
-
-    unsigned int VBO;
-    GLCall(glGenBuffers(1, &VBO));
-    GLCall(glBindBuffer(GL_ARRAY_BUFFER, VBO));
-    GLCall(glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(float), &positions[0], GL_STATIC_DRAW));
-
-    GLCall(glEnableVertexAttribArray(0));
-    GLCall(glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (const void*)0));
-
-    unsigned int EBO;
-    GLCall(glGenBuffers(1, &EBO));
-    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
-    GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW));
-
-    ShaderProgramSource source = ParseShader("res/shaders/basic.shader");
-    unsigned int shader = CreateShader(source.VertexSource, source.FragmentSource);
-    GLCall(glUseProgram(shader));
-
-    GLCall(int location = glGetUniformLocation(shader, "u_Color"));
-    ASSERT(location != -1);
-    GLCall(glUniform4f(location, 0.2f, 0.3f, 0.8f, 1.0f));
-
-    GLCall(glBindVertexArray(0));
-    GLCall(glUseProgram(0));
-    GLCall(glBindBuffer(GL_ARRAY_BUFFER, 0));
-    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
-
-    float r = 0.0f;
-    float increment = 0.05f;
-
-
-
-    /* Loop until the user closes the window */
-    while (!glfwWindowShouldClose(window))
     {
-        /* Render here */
-        GLCall(glClear(GL_COLOR_BUFFER_BIT));
+        /* Geometry content */
+        float positions[] = {
+            // Positions            // UVs
+             0.5f,       0.5f,      1.0f,   1.0f,
+            -0.5f,       0.5f,      0.0f,   1.0f,
+            -0.5f,      -0.5f,      0.0f,   0.0f,
+             0.5f,      -0.5f,      1.0f,   0.0f
+        };
+
+        unsigned int indices[] = {
+            0, 1, 2,
+            0, 2, 3
+        };
+
+        /* Buffer setup */
+        VertexArray VAO;
+        VertexBuffer VBO(positions, 4 * 4 * sizeof(float));
+        VertexBufferLayout layout;
+        layout.Push<float>(2);
+        layout.Push<float>(2);
+        VAO.AddBuffer(VBO, layout);
+        IndexBuffer EBO(indices, 6);
+
+        /* Projection setup */
+        glm::mat4 proj = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, -1.0f, 1.0f);
+        glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+
+        /* Shader setup */
+        Shader shader("res/shaders/basic.shader");
+        shader.Bind();
+        shader.SetUniform4f("u_Color", glm::vec4(0.8f, 0.3f, 0.8f, 1.0f));
+
+        /* Texture setup */
+        Texture texture("res/textures/awesomeface.png");
+        texture.Bind();
+        shader.SetUniform1i("u_Texture", 0);
+
+        /* Cleaning up */
+        VAO.Unbind();
+        VBO.Unbind();
+        EBO.Unbind();
+        shader.Unbind();
+
+        /* Renderer setup */
+        Renderer renderer;
+
+        /* GUI setup */
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        ImGui::StyleColorsDark();
+        ImGui_ImplGlfw_InitForOpenGL(window, true);
+        ImGui_ImplOpenGL3_Init((char*)glGetString(GL_NUM_SHADING_LANGUAGE_VERSIONS));
+
+        /* Interactivity */
+        glm::vec3 translationA = glm::vec3(-0.5f, -0.5f, 0.0f);
+        glm::vec3 translationB = glm::vec3(0.5f, 0.5f, 0.0f);
 
 
 
-
-
-
-        /* Render stuff here */
-        GLCall(glUseProgram(shader));
-        GLCall(glUniform4f(location, r, 0.3f, 0.8f, 1.0f));
-
-        GLCall(glBindVertexArray(VAO));
-        GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
-
-        GLCall(glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr));
-
-        if (r > 1.0f)
+        /* Loop until the user closes the window */
+        while (!glfwWindowShouldClose(window))
         {
-            increment = -0.05f;
+            renderer.Clear();
+
+            /* GUI setup */
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+
+            /* Recalculating MVP matrices */
+            {
+                glm::mat4 modelA = glm::translate(glm::mat4(1.0f), translationA);
+                glm::mat4 mvpA = proj * view * modelA;
+                shader.Bind();
+                shader.SetUniformMat4f("u_MVP", mvpA);
+                renderer.Draw(VAO, EBO, shader);
+            }
+
+            {
+                glm::mat4 modelB = glm::translate(glm::mat4(1.0f), translationB);
+                glm::mat4 mvpB = proj * view * modelB;
+                shader.Bind();
+                shader.SetUniformMat4f("u_MVP", mvpB);
+                renderer.Draw(VAO, EBO, shader);
+            }
+
+            /* GUI content */
+            {
+                ImGui::SliderFloat3("TranslationA", &translationA.x, -1.0f, 1.0f);
+                ImGui::SliderFloat3("TranslationB", &translationB.x, -1.0f, 1.0f);
+                ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+            }
+
+            /* GUI rendering */
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+            /* Swap front and back buffers */
+            glfwSwapBuffers(window);
+
+            /* Poll for and process events */
+            glfwPollEvents();
         }
-        else if (r < 0.0f)
-        {
-            increment = 0.05f;
-        }
-        r += increment;
-
-
-
-
-
-
-
-        /* Swap front and back buffers */
-        glfwSwapBuffers(window);
-
-        /* Poll for and process events */
-        glfwPollEvents();
     }
 
-    GLCall(glDeleteProgram(shader));
+    /* GUI cleanup */
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
+    /* GLFW cleanup */
     glfwTerminate();
     return 0;
 }
