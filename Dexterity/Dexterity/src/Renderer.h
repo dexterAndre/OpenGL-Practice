@@ -4,7 +4,7 @@
 
 #include "VertexArray.h"
 #include "IndexBuffer.h"
-#include "VertexBufferLayout.h"
+//#include "VertexBufferLayout.h"
 #include "Shader.h"
 
 #define ASSERT(x) if (!(x)) __debugbreak();
@@ -14,6 +14,8 @@
 
 void GLClearError();
 bool GLLogCall(const char* function, const char* file, int line);
+
+class VertexBufferLayout;
 
 class Renderer
 {
