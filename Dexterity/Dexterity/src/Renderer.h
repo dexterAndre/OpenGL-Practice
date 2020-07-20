@@ -4,6 +4,7 @@
 
 #include "VertexArray.h"
 #include "IndexBuffer.h"
+#include "VertexBufferLayout.h"
 #include "Shader.h"
 
 #define ASSERT(x) if (!(x)) __debugbreak();
